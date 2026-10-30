@@ -1,0 +1,41 @@
+[project]
+name = "rae-cifar"
+version = "0.1.0"
+description = "RAE (representation autoencoder + DiT) on CIFAR-10 with a dino-cifar DINOv2 ViT-Tiny/4 encoder"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "cifar-dino",
+    "torch>=2.4",
+    "torchvision>=0.19",
+    "timm==0.9.16",
+    "accelerate",
+    "torchdiffeq",
+    "wandb",
+    "transformers==4.56.2",
+    "einops",
+    "omegaconf==2.3.0",
+    "numpy>=1.26",
+    "torchmetrics",
+    "torch-fidelity",
+    "scipy",
+    "tqdm",
+]
+
+[dependency-groups]
+dev = [
+    "matplotlib>=3.11.2",
+    "pytest>=8.3",
+]
+
+[tool.uv]
+package = false
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }
+torchvision = { index = "pytorch-cu124" }
+cifar-dino = { git = "https://github.com/shumpei-takezaki/dino-cifar" }

@@ -44,11 +44,11 @@ def find_resume_checkpoint(resume_dir) -> Optional[str]:
     ]
     if len(checkpoints) == 0:
         return None
-    # sort via epoch, saved as 'ep-{epoch:07d}.pt'
-    checkpoints = sorted(
-        checkpoints,
-        key=lambda x: int(os.path.basename(x).split("-")[1].split(".")[0]),
-    )
+    # sort via epoch, saved as 'ep-{epoch:07d}.pt'; 'ep-last.pt' (end of training) is the newest
+    def _epoch(path):
+        tag = os.path.basename(path).split("-")[1].split(".")[0]
+        return float("inf") if tag == "last" else int(tag)
+    checkpoints = sorted(checkpoints, key=_epoch)
     return checkpoints[-1]
 
 def save_worktree(

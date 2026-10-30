@@ -1,0 +1,73 @@
+# Encoder DINOv2 ViT-S/4 (width 384, latent [384, 8, 8]; docs/experiments/06), otherwise identical to cifar_dinov2_decXL_gan_ft.yaml.
+# Stage 1 GAN fine-tune with a ViT-XL decoder (28 layers, width 1152): start from dinov2_decXL_nogan's EMA decoder (ep 400).
+# Same recipe as cifar_dinov2_decB_gan_ft.yaml (32px dino-cifar DINO v1 disc, 100 epochs, GAN loss from epoch 10).
+# Run with --precision bf16.
+stage_1:
+  target: stage1.RAE
+  params:
+    encoder_cls: 'CifarDinoViT'
+    encoder_config_path: 'unused'          # only read for HF encoders (pixel stats come from the encoder class)
+    encoder_input_size: 32
+    encoder_params:
+      ckpt_path: 'pretrained_models/encoder_dinov2_vit_s4.pt'
+      normalize: true
+    decoder_config_path: 'configs/decoder/ViTXL'
+    decoder_patch_size: 4
+    pretrained_decoder_path: 'ckpts/stage1/dinov2s_decXL_nogan/decoder_ema.pt'
+    noise_tau: 0.8 # training 0.8, at inference time always set to 0
+    reshape_to_2d: true
+
+training:
+  epochs: 100
+  ema_decay: 0.9978
+  global_batch_size: 512
+  num_workers: 4
+  clip_grad: 0.0
+  grad_checkpointing: true   # needed to fit ViT-XL at batch 512
+  log_interval: 100
+  checkpoint_interval: 100   # each ckpt holds model + EMA + AdamW (B 1.4GB, L 4.9GB, XL 6.7GB)
+  sample_every: 2500
+  optimizer:
+    lr: 2.0e-4
+    betas: [0.9, 0.95]
+    weight_decay: 0.0
+  scheduler:
+    type: cosine
+    warmup_epochs: 1
+    decay_end_epoch: 100
+    base_lr: 1.0e-4
+    final_lr: 2.0e-5
+    warmup_from_zero: true
+
+gan:
+  disc:
+    arch:
+      dino_ckpt_path: 'pretrained_models/disc_dino_vit_tiny4.pt'   # DINO v1, not the DINOv2 encoder
+      ks: 9
+      norm_type: 'bn'
+      using_spec_norm: true
+      recipe: 'cifar'
+    optimizer:
+      lr: 2.0e-4
+      betas: [0.9, 0.95]
+      weight_decay: 0.0
+    scheduler:
+      type: cosine
+      warmup_epochs: 2
+      decay_end_epoch: 100
+      base_lr: 2.0e-4
+      final_lr: 2.0e-5
+      warmup_from_zero: true
+    augment:
+      prob: 1.0
+      cutout: 0.0
+  loss:
+    disc_loss: hinge
+    gen_loss: vanilla
+    disc_weight: 0.75
+    perceptual_weight: 1.0
+    disc_start: 10            # disc trains alone for 10 epochs first (official: 150 -> 200 of 400)
+    disc_upd_start: 0
+    lpips_start: 0
+    max_d_weight: 10000.0
+    disc_updates: 1

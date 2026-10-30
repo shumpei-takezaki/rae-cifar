@@ -218,25 +218,11 @@ class DinoDisc(nn.Module):
         recipe: str = "S_16",
     ):
         super().__init__()
-        state = torch.load(dino_ckpt_path, map_location="cpu")
-        for key in sorted(state.keys()):
-            if ".attn.qkv.bias" in key:
-                bias = state[key]
-                C = bias.numel() // 3
-                bias[C : 2 * C].zero_()
-
-        recipe_cfg = dict(recipes[recipe])
-        key_depths = tuple(d for d in key_depths if d < recipe_cfg["depth"])
-        recipe_cfg.update({"key_depths": key_depths, "norm_eps": norm_eps})
-        dino = FrozenDINONoDrop(**recipe_cfg)
-        missing, unexpected = dino.load_state_dict(state, strict=False)
-        missing = [m for m in missing if all(x not in m for x in {"x_scale", "x_shift"})]
-        if missing:
-            raise RuntimeError(f"DINO checkpoint missing keys: {missing}")
-        if unexpected:
-            raise RuntimeError(f"DINO checkpoint has unexpected keys: {unexpected}")
-        dino.eval()
-        self.dino_proxy: Tuple[FrozenDINONoDrop, ...] = (dino.to(device=device),)
+        if recipe == "cifar":
+            dino = CifarDINOProxy(dino_ckpt_path, key_depths)
+        else:
+            dino = self._load_official_dino(dino_ckpt_path, recipe, key_depths, norm_eps)
+        self.dino_proxy: Tuple[nn.Module, ...] = (dino.to(device=device),)
         dino_C = self.dino_proxy[0].embed_dim
         self.heads = nn.ModuleList(
             [
@@ -247,7 +233,7 @@ class DinoDisc(nn.Module):
                     ),
                     (SpectralConv1d if using_spec_norm else nn.Conv1d)(dino_C, 1, kernel_size=1, padding=0),
                 )
-                for _ in range(len(key_depths) + 1)
+                for _ in range(len(self.dino_proxy[0].key_depths) + 1)
             ]
         )
         # train heads
@@ -266,6 +252,60 @@ class DinoDisc(nn.Module):
             out = head(act).view(batch, -1)
             outputs.append(out)
         return torch.cat(outputs, dim=1)
+
+    @staticmethod
+    def _load_official_dino(dino_ckpt_path: str, recipe: str, key_depths, norm_eps) -> FrozenDINONoDrop:
+        state = torch.load(dino_ckpt_path, map_location="cpu")
+        for key in sorted(state.keys()):
+            if ".attn.qkv.bias" in key:
+                bias = state[key]
+                C = bias.numel() // 3
+                bias[C : 2 * C].zero_()
+
+        recipe_cfg = dict(recipes[recipe])
+        key_depths = tuple(d for d in key_depths if d < recipe_cfg["depth"])
+        recipe_cfg.update({"key_depths": key_depths, "norm_eps": norm_eps})
+        dino = FrozenDINONoDrop(**recipe_cfg)
+        missing, unexpected = dino.load_state_dict(state, strict=False)
+        missing = [m for m in missing if all(x not in m for x in {"x_scale", "x_shift"})]
+        if missing:
+            raise RuntimeError(f"DINO checkpoint missing keys: {missing}")
+        if unexpected:
+            raise RuntimeError(f"DINO checkpoint has unexpected keys: {unexpected}")
+        return dino.eval()
+
+
+class CifarDINOProxy(nn.Module):
+    """Frozen dino-cifar ViT (trained on 32x32 CIFAR) as a drop-in for FrozenDINONoDrop (recipe 'cifar').
+
+    Takes [-1, 1] images at 32px (no resize) and returns the same activations: the last block's patch tokens,
+    then the patch tokens after each key depth, each as [B, C, N].
+    """
+
+    def __init__(self, ckpt_path: str, key_depths=(2, 5, 8, 11)):
+        super().__init__()
+        from cifar_dino.export import load_backbone
+
+        self.vit, _ = load_backbone(ckpt_path)
+        self.vit.requires_grad_(False)
+        self.embed_dim = self.vit.embed_dim
+        self.key_depths = set(d for d in key_depths if d < len(self.vit.blocks))
+        mean = torch.tensor((0.4914, 0.4822, 0.4465))  # CIFAR-10 stats used by dino-cifar
+        std = torch.tensor((0.2470, 0.2435, 0.2616))
+        self.register_buffer("x_scale", (0.5 / std).reshape(1, 3, 1, 1))
+        self.register_buffer("x_shift", ((0.5 - mean) / std).reshape(1, 3, 1, 1))
+        self.eval()
+
+    def forward(self, x: torch.Tensor, grad_ckpt: bool = False) -> List[torch.Tensor]:
+        x = self.vit.prepare_tokens(x * self.x_scale + self.x_shift)
+        first_patch = 1 + self.vit.num_register_tokens
+        activations = []
+        for idx, block in enumerate(self.vit.blocks):
+            x = block(x)
+            if idx in self.key_depths:
+                activations.append(x[:, first_patch:, :].transpose(1, 2))
+        activations.insert(0, x[:, first_patch:, :].transpose(1, 2))
+        return activations
 
 
 class PatchEmbed(nn.Module):

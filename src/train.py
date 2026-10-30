@@ -91,7 +91,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=str, required=True, help="YAML config containing stage_1 and stage_2 sections.")
     parser.add_argument("--data-path", type=Path, required=True, help="Directory with ImageFolder structure for training.")
     parser.add_argument("--results-dir", type=str, default="ckpts", help="Directory to store training outputs.")
-    parser.add_argument("--image-size", type=int, choices=[256, 512], default=256, help="Input image resolution.")
+    parser.add_argument("--image-size", type=int, choices=[32, 256, 512], default=256, help="Input image resolution.")
     parser.add_argument("--precision", type=str, choices=["fp32", "fp16", "bf16"], default="fp32", help="Compute precision for training.")
     parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging.")
     parser.add_argument("--compile", action="store_true", help="Use torch compile (for rae.encode and model.forward).")
@@ -226,8 +226,7 @@ def main():
             model.forward = torch.compile(model.forward)
         except:
             print('MODEL FORWARD compile meets error, falling back to no compile')
-    else:
-        raise NotImplementedError('ARGS>COMPILE')
+    # rae-cifar: upstream raised here without --compile; torch.compile needs Python.h, which this machine lacks
     ema_model = deepcopy(model).to(device)
     ema_model.requires_grad_(False)
     ema_model.eval()

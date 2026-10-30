@@ -1,0 +1,15 @@
+# Inference config for the Stage 1 decoder of experiment 06 (DINOv2 ViT-S/4 encoder, ViT-XL decoder, nogan; EMA).
+stage_1:
+  target: stage1.RAE
+  params:
+    encoder_cls: 'CifarDinoViT'
+    encoder_config_path: 'unused'
+    encoder_input_size: 32
+    encoder_params:
+      ckpt_path: 'pretrained_models/encoder_dinov2_vit_s4.pt'
+      normalize: true
+    decoder_config_path: 'configs/decoder/ViTXL'
+    decoder_patch_size: 4
+    pretrained_decoder_path: 'ckpts/stage1/dinov2s_decXL_nogan/decoder_ema.pt'
+    noise_tau: 0.
+    reshape_to_2d: true

@@ -35,10 +35,13 @@ class RAE(nn.Module):
         encoder_cls = ARCHS[encoder_cls]
         self.encoder: Stage1Protocal = encoder_cls(**encoder_params)
         print(f"encoder_config_path: {encoder_config_path}")
-        proc = AutoImageProcessor.from_pretrained(encoder_config_path)
-        self.encoder_mean = torch.tensor(proc.image_mean).view(1, 3, 1, 1)
-        self.encoder_std = torch.tensor(proc.image_std).view(1, 3, 1, 1)
-        encoder_config = AutoConfig.from_pretrained(encoder_config_path)
+        if hasattr(self.encoder, "image_mean"):  # encoders not on the HF hub carry their own pixel stats
+            image_mean, image_std = self.encoder.image_mean, self.encoder.image_std
+        else:
+            proc = AutoImageProcessor.from_pretrained(encoder_config_path)
+            image_mean, image_std = proc.image_mean, proc.image_std
+        self.encoder_mean = torch.tensor(image_mean).view(1, 3, 1, 1)
+        self.encoder_std = torch.tensor(image_std).view(1, 3, 1, 1)
         # see if the encoder has patch size attribute            
         self.encoder_input_size = encoder_input_size
         self.encoder_patch_size = self.encoder.patch_size

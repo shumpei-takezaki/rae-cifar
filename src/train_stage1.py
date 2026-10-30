@@ -15,10 +15,12 @@ import math
 import os
 from collections import defaultdict
 from copy import deepcopy
+from functools import partial
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 import torch
 import torch.distributed as dist
+import torch.utils.checkpoint
 import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import LambdaLR
@@ -225,6 +227,9 @@ def main():
         rae.forward = torch.compile(rae.forward)
     rae.encoder.eval()
     rae.decoder.train()
+    if training_cfg.get("grad_checkpointing", False):  # recompute decoder blocks in backward (big decoders at batch 512)
+        rae.decoder.gradient_checkpointing = True
+        rae.decoder._gradient_checkpointing_func = partial(torch.utils.checkpoint.checkpoint, use_reentrant=False)
     ema_model = deepcopy(rae).to(device).eval()
     ema_model.requires_grad_(False)
     # only train decoder
@@ -262,7 +267,9 @@ def main():
             transforms.RandomCrop(args.image_size),
             transforms.ToTensor(),
         ]
-    )    
+    ) if args.image_size > 32 else transforms.Compose(  # CIFAR: images are already 32x32, so flip only
+        [transforms.RandomHorizontalFlip(), transforms.ToTensor()]
+    )
     loader, sampler = prepare_dataloader(
         args.data_path, batch_size, num_workers, rank, world_size, transform=stage1_transform
     )

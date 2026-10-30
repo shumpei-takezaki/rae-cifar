@@ -65,7 +65,7 @@ def main(args):
     num_classes = misc.get("num_classes", 1000)
     latent_size = misc.get("latent_size", (768, 16, 16))
     # Labels to condition the model with (feel free to change):
-    class_labels = [207, 360]
+    class_labels = [207, 360] if num_classes == 1000 else list(range(num_classes))  # CIFAR: one per class
 
     # Create sampling noise:
     n = len(class_labels)
@@ -74,7 +74,7 @@ def main(args):
 
     # Setup classifier-free guidance:
     z = torch.cat([z, z], 0)
-    y_null = torch.tensor([1000] * n, device=device)
+    y_null = torch.tensor([num_classes] * n, device=device)
     y = torch.cat([y, y_null], 0)
     
     # set guidance setup
@@ -106,7 +106,7 @@ def main(args):
     print(f"Sampling took {time() - start_time:.2f} seconds.")
 
     # Save and display images:
-    save_image(samples, "sample.png", nrow=4, normalize=True, value_range=(0, 1))
+    save_image(samples, "sample.png", nrow=min(n, 10), normalize=True, value_range=(0, 1))
 
 
 if __name__ == "__main__":

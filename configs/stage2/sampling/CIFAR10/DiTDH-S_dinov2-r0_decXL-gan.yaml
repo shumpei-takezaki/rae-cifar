@@ -1,0 +1,65 @@
+# Sampling config for the CIFAR-10 Stage 2 run ditdhS_decXLgan (DiTDH-S, XL GAN decoder). Same model / transport /
+# sampler as configs/stage2/training/CIFAR10/DiTDH-S_dinov2-r0_decXL-gan.yaml. Used by scripts/eval_stage2.sh.
+stage_1:
+  target: stage1.RAE
+  params:
+    encoder_cls: 'CifarDinoViT'
+    encoder_config_path: 'unused'
+    encoder_input_size: 32
+    encoder_params:
+      ckpt_path: 'pretrained_models/encoder_dinov2_vit_tiny4.pt'
+      normalize: true
+    decoder_config_path: 'configs/decoder/ViTXL'
+    decoder_patch_size: 4
+    pretrained_decoder_path: 'ckpts/stage1/dinov2_decXL_gan_ft/decoder_ema.pt'
+    noise_tau: 0.
+    reshape_to_2d: true
+    normalization_stat_path: 'stats/cifar10_dinov2_r0/normalization_stats.pt'
+
+stage_2:
+  target: stage2.models.DDT.DiTwDDTHead
+  params:
+    input_size: 8
+    patch_size: 1
+    in_channels: 192
+    hidden_size: [384, 2048]
+    depth: [12, 2]
+    num_heads: [6, 16]
+    mlp_ratio: 4.0
+    class_dropout_prob: 0.1
+    num_classes: 10
+    use_qknorm: false
+    use_swiglu: true
+    use_rope: true
+    use_rmsnorm: true
+    wo_shift: false
+    use_pos_embed: true
+  ckpt: 'ckpts/stage2/ditdhS_decXLgan/checkpoints/ep-last.pt'   # loads the 'ema' weights
+
+transport:
+  params:
+    path_type: 'Linear'
+    prediction: 'velocity'
+    loss_weight: null
+    time_dist_type: 'logit-normal_0_1'
+
+sampler:
+  mode: ODE
+  params:
+    sampling_method: 'euler'
+    num_steps: 50
+    atol: 1.0e-6
+    rtol: 1.0e-3
+    reverse: false
+
+guidance:
+  method: 'cfg'
+  scale: 3.0   # CFG (labels were dropped with p=0.1 in training); override with scripts/eval_stage2.sh <cfg> <name> <scale>
+  t_min: 0.0
+  t_max: 1.0
+
+misc:
+  latent_size: [192, 8, 8] # [C, H, W]
+  num_classes: 10
+  time_dist_shift_dim: 12288 # 8*8*192 -> shift sqrt(12288/4096) ~= 1.73
+  time_dist_shift_base: 4096
