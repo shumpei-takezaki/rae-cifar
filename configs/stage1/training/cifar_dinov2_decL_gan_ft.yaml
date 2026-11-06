@@ -8,7 +8,7 @@ stage_1:
     encoder_config_path: 'unused'          # only read for HF encoders (pixel stats come from the encoder class)
     encoder_input_size: 32
     encoder_params:
-      ckpt_path: 'pretrained_models/encoder_dinov2_vit_tiny4.pt'
+      ckpt_path: 'pretrained_models/encoders/encoder_dinov2_vit_tiny4.pt'
       normalize: true
     decoder_config_path: 'configs/decoder/ViTL'
     decoder_patch_size: 4
@@ -41,7 +41,7 @@ training:
 gan:
   disc:
     arch:
-      dino_ckpt_path: 'pretrained_models/disc_dino_vit_tiny4.pt'   # DINO v1, not the DINOv2 encoder
+      dino_ckpt_path: 'pretrained_models/encoders/disc_dino_vit_tiny4.pt'   # DINO v1, not the DINOv2 encoder
       ks: 9
       norm_type: 'bn'
       using_spec_norm: true

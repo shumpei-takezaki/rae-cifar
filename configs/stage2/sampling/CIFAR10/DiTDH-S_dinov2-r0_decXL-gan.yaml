@@ -7,7 +7,7 @@ stage_1:
     encoder_config_path: 'unused'
     encoder_input_size: 32
     encoder_params:
-      ckpt_path: 'pretrained_models/encoder_dinov2_vit_tiny4.pt'
+      ckpt_path: 'pretrained_models/encoders/encoder_dinov2_vit_tiny4.pt'
       normalize: true
     decoder_config_path: 'configs/decoder/ViTXL'
     decoder_patch_size: 4

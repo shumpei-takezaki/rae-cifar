@@ -88,7 +88,7 @@ wheels = [
 [[package]]
 name = "cifar-dino"
 version = "0.1.0"
-source = { git = "https://github.com/shumpei-takezaki/dino-cifar#cf21f6091f98991cf76a28d923b8bb1604cc48dd" }
+source = { git = "https://github.com/shumpei-takezaki/dino-cifar#5164c7f8748dabd8227203f79ff1f80456495716" }
 dependencies = [
     { name = "numpy" },
     { name = "pyyaml" },

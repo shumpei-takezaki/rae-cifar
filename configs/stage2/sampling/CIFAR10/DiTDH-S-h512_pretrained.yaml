@@ -7,14 +7,14 @@ stage_1:
     encoder_config_path: 'unused'
     encoder_input_size: 32
     encoder_params:
-      ckpt_path: 'pretrained_models/encoder_dinov2_vit_tiny4.pt'
+      ckpt_path: 'pretrained_models/encoders/encoder_dinov2_vit_tiny4.pt'
       normalize: true
     decoder_config_path: 'configs/decoder/ViTXL'
     decoder_patch_size: 4
-    pretrained_decoder_path: 'pretrained_models/decoder_vitxl_gan.pt'
+    pretrained_decoder_path: 'pretrained_models/stage1/decoder_vitxl_gan.pt'
     noise_tau: 0.
     reshape_to_2d: true
-    normalization_stat_path: 'pretrained_models/normalization_stats.pt'
+    normalization_stat_path: 'pretrained_models/stats/normalization_stats.pt'
 
 stage_2:
   target: stage2.models.DDT.DiTwDDTHead
@@ -34,7 +34,7 @@ stage_2:
     use_rmsnorm: true
     wo_shift: false
     use_pos_embed: true
-  ckpt: 'pretrained_models/ditdh_s_h512_ema.pt'
+  ckpt: 'pretrained_models/stage2/ditdh_s_h512_ema.pt'
 
 transport:
   params:

@@ -43,23 +43,55 @@ uv run python scripts/prepare_cifar10.py     # downloads CIFAR-10 to data/; writ
 
 ## Pretrained weights
 
-From [huggingface.co/shumpei777/rae-cifar](https://huggingface.co/shumpei777/rae-cifar):
+From [huggingface.co/shumpei777/rae-cifar](https://huggingface.co/shumpei777/rae-cifar).
+
+Quick start with the default model (DiT<sup>DH</sup>-S with a 512-wide head, about 1.8 GB):
 
 ```bash
-uv run hf download shumpei777/rae-cifar --local-dir pretrained_models
+uv run hf download shumpei777/rae-cifar --local-dir pretrained_models \
+  --include stage2/ditdh_s_h512_ema.pt stage1/decoder_vitxl_gan.pt encoders/encoder_dinov2_vit_tiny4.pt stats/normalization_stats.pt
 PYTHONPATH=src uv run python src/sample.py --config configs/stage2/sampling/CIFAR10/DiTDH-S-h512_pretrained.yaml   # -> sample.png, one per class
 ```
 
+All weights (about 13 GB): `uv run hf download shumpei777/rae-cifar --local-dir pretrained_models`.
+The repository is organized into `encoders/`, `stats/`, `stage1/` and `stage2/`. Releases v0.1 and v0.2 of this code expect the older flat
+layout: download those with `--revision v0.2`.
+
+**Encoders and shared files**
+
 | File | Content | Size |
-|---|---|---|
-| `encoder_dinov2_vit_tiny4.pt` | DINOv2 ViT-Tiny/4 encoder (EMA teacher) | 22 MB |
-| `normalization_stats.pt` | per-channel, per-position latent mean / var (train, with flips) | 0.1 MB |
-| `decoder_vitxl_gan.pt` | ViT-XL decoder, GAN fine-tuned (EMA) | 1.7 GB |
-| `ditdh_s_h512_ema.pt` | DiT<sup>DH</sup>-S with a 512-wide head, 2000 epochs (EMA), the best model (FID 7.94) | 0.2 GB |
-| `ditdh_s_ema.pt` | DiT<sup>DH</sup>-S with the official 2048-wide head, 2000 epochs (EMA; FID 13.59) | 0.8 GB |
-| `encoder_dinov2_vit_s4.pt` | DINOv2 ViT-S/4 encoder (experiment 06) | 85 MB |
-| `decoder_vitxl_gan_s4.pt` | ViT-XL decoder for the ViT-S/4 encoder, GAN fine-tuned (EMA) | 1.7 GB |
-| `disc_dino_vit_tiny4.pt` | DINO (v1) ViT-Tiny/4, frozen backbone of the GAN discriminator (only for training) | 22 MB |
+|---|---|---:|
+| `encoders/encoder_dinov2_vit_tiny4.pt` | DINOv2 ViT-Tiny/4 encoder (EMA teacher) | 22 MB |
+| `encoders/encoder_dinov2_vit_s4.pt` | DINOv2 ViT-S/4 encoder (experiment 06) | 85 MB |
+| `stats/normalization_stats.pt` | per-channel, per-position latent mean / var of the Tiny encoder (train, with flips) | 0.1 MB |
+| `encoders/disc_dino_vit_tiny4.pt` | DINO (v1) ViT-Tiny/4, frozen backbone of the GAN discriminator (only for training) | 22 MB |
+
+**Stage 1 decoders** (EMA; inference configs in `configs/stage1/pretrained/`)
+
+| File | Encoder | Decoder | GAN | Noise aug. | Test rFID | Experiment | Size |
+|---|---|---|---|---|---:|---|---:|
+| `stage1/decoder_vitb.pt` | Tiny | ViT-B | no | yes | 5.51 | 01 | 0.3 GB |
+| `stage1/decoder_vitb_gan.pt` | Tiny | ViT-B | yes | yes | 6.57 | 01 | 0.3 GB |
+| `stage1/decoder_vitl.pt` | Tiny | ViT-L | no | yes | 5.15 | 01 | 1.2 GB |
+| `stage1/decoder_vitl_gan.pt` | Tiny | ViT-L | yes | yes | 5.80 | 01 | 1.2 GB |
+| `stage1/decoder_vitxl.pt` | Tiny | ViT-XL | no | yes | 5.25 | 01 | 1.7 GB |
+| `stage1/decoder_vitxl_gan.pt` | Tiny | ViT-XL | yes | yes | 5.71 | 01, used by Stage 2 | 1.7 GB |
+| `stage1/decoder_vitxl_gan_nonoise.pt` | Tiny | ViT-XL | yes | no | 4.22 | 10 | 1.7 GB |
+| `stage1/decoder_vitxl_s4.pt` | S | ViT-XL | no | yes | 3.97 | 06 | 1.7 GB |
+| `stage1/decoder_vitxl_gan_s4.pt` | S | ViT-XL | yes | yes | 3.71 | 06 | 1.7 GB |
+
+**Stage 2 models** (EMA, 2000 epochs, Tiny encoder; FID on 50k samples without CFG; sampling configs `configs/stage2/sampling/CIFAR10/<name>_pretrained.yaml`)
+
+| File | Model | Config `<name>` | FID | Experiment | Size |
+|---|---|---|---:|---|---:|
+| `stage2/ditdh_s_h512_ema.pt` | **DiT<sup>DH</sup>-S with a 512-wide head (default)** | `DiTDH-S-h512` | **7.94** | 07 | 0.2 GB |
+| `stage2/lightningdit_s_ema.pt` | LightningDiT-S/1, no DDT head | `LightningDiT-S` | 8.70 | 08 | 0.1 GB |
+| `stage2/ditdh_s_h512_noshift_ema.pt` | 512-wide head, no time shift | `DiTDH-S-h512-noshift` | 9.01 | 09 | 0.2 GB |
+| `stage2/ditdh_ti_ema.pt` | DiT<sup>DH</sup>-Ti (18.5M) | `DiTDH-Ti` | 9.64 | 07 | 0.1 GB |
+| `stage2/ditdh_s_ema.pt` | DiT<sup>DH</sup>-S with the official 2048-wide head | `DiTDH-S` | 13.59 | 02 | 0.8 GB |
+
+The config `DiTDH-S-h512-nonoise` decodes the default model with `stage1/decoder_vitxl_gan_nonoise.pt` (experiment 10, FID 10.45).
+All Stage 2 models use `stage1/decoder_vitxl_gan.pt` otherwise.
 
 ## Training from scratch
 
@@ -85,6 +117,8 @@ scripts/train_stage2.sh configs/stage2/training/CIFAR10/DiTDH-S-h512_dinov2-r0_d
 scripts/eval_stage2.sh configs/stage2/sampling/CIFAR10/DiTDH-S-h512_dinov2-r0_decXL-gan.yaml ditdh_s_h512_decXLgan_last_cfg1.0 1.0
 ```
 
+The inference configs in `configs/stage1/pretrained/` read the released decoders from `pretrained_models/`; to evaluate a decoder
+you trained yourself, point `pretrained_decoder_path` to its `decoder_ema.pt`.
 Configs for the other decoders (B / L, with and without GAN) are in `configs/stage1/`. The commands for each experiment
 are at the end of its file in `docs/experiments/`.
 

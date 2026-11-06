@@ -8,7 +8,7 @@ import torch
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
-CKPT = ROOT / "pretrained_models/disc_dino_vit_tiny4.pt"
+CKPT = ROOT / "pretrained_models/encoders/disc_dino_vit_tiny4.pt"
 
 
 def test_cifar_disc_shapes_and_grads():
