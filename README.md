@@ -6,7 +6,7 @@ on CIFAR-10, built on the [official implementation](https://github.com/bytetripe
 - **Encoder:** a DINOv2 ViT-Tiny/4 (no registers) trained from scratch on CIFAR-10 with
   [dino-cifar](https://github.com/shumpei-takezaki/dino-cifar), frozen. Latent: `[192, 8, 8]` (64 tokens of dim 192).
 - **Decoder:** the official ViT decoder (patch 4), trained with L1 + LPIPS (+ GAN) and latent noise augmentation.
-- **Generator:** DiT<sup>DH</sup>-S on the normalized latent, class-conditional (10 classes).
+- **Generator:** DiT<sup>DH</sup>-S with a 512-wide DDT head (the official 2048-wide head is too large here, see experiment 07), class-conditional (10 classes).
 
 Detailed write-ups are in [docs/](docs/README.md), one file per experiment.
 
@@ -21,13 +21,16 @@ Detailed write-ups are in [docs/](docs/README.md), one file per experiment.
 | 05 | [Radial / angular split of the loss](docs/experiments/05_radial_angular.md) | RJF Fig. 4 | Training on the angular part alone converges even at d = 64 (0.004 vs. 0.74), but this is nearly trivial for a single image |
 | 06 | [Encoder size (Tiny vs. S; B coming soon)](docs/experiments/06_encoder_capacity.md) | Table 1c | A larger encoder (ViT-S/4, token dim 384) improved reconstruction on every metric (test rFID 5.25 → 3.97, PSNR +2.6 dB), unlike the paper (nearly constant) |
 
+| 07 | [Stage 2 model size](docs/experiments/07_stage2_model_size.md) | Fig. 6, Table 17 | A 512-wide head beats the official 2048 head: FID 7.94 vs. 13.59 with 4.5× fewer parameters, and FID no longer degrades during training. CFG only makes FID worse |
+| 08 | [Is the DDT head needed?](docs/experiments/08_ddt_head.md) | Table 6 | Without a head, FID 8.70 vs. 7.94 with the 512 head. A plain DiT with width = n diverged |
+| 09 | [Ablation: noise-schedule shift](docs/experiments/09_time_shift.md) | Table 4 | Same direction as the paper, smaller effect: FID 9.01 without vs. 7.94 with shift (α ≈ 1.73) |
+| 10 | [Ablation: decoder noise augmentation](docs/experiments/10_decoder_noise.md) | Table 5 | Reproduces the trade-off: without noise, test rFID improves (5.71 → 4.22) but generation worsens (FID 7.94 → 10.45) |
+
 RJF: [Learning on the Manifold](https://arxiv.org/abs/2602.10099).
 
 **Coming soon**
 
 - Encoder size: DINOv2 ViT-B/4 (token dim 768).
-- Stage 2 ablations of the RAE design choices that are already on by default here: noise-augmented decoder training
-  (`noise_tau: 0.8`), the wide DDT head of DiT<sup>DH</sup>, and the dimension-dependent noise-schedule shift (√(12288/4096) ≈ 1.73).
 - Follow-ups: RAEv2, RJF (Learning on the Manifold), CIFAR-100.
 
 ## Setup
@@ -44,7 +47,7 @@ From [huggingface.co/shumpei777/rae-cifar](https://huggingface.co/shumpei777/rae
 
 ```bash
 uv run hf download shumpei777/rae-cifar --local-dir pretrained_models
-PYTHONPATH=src uv run python src/sample.py --config configs/stage2/sampling/CIFAR10/DiTDH-S_pretrained.yaml   # -> sample.png, one per class
+PYTHONPATH=src uv run python src/sample.py --config configs/stage2/sampling/CIFAR10/DiTDH-S-h512_pretrained.yaml   # -> sample.png, one per class
 ```
 
 | File | Content | Size |
@@ -52,7 +55,8 @@ PYTHONPATH=src uv run python src/sample.py --config configs/stage2/sampling/CIFA
 | `encoder_dinov2_vit_tiny4.pt` | DINOv2 ViT-Tiny/4 encoder (EMA teacher) | 22 MB |
 | `normalization_stats.pt` | per-channel, per-position latent mean / var (train, with flips) | 0.1 MB |
 | `decoder_vitxl_gan.pt` | ViT-XL decoder, GAN fine-tuned (EMA) | 1.7 GB |
-| `ditdh_s_ema.pt` | DiT<sup>DH</sup>-S, 2000 epochs (EMA) | 0.8 GB |
+| `ditdh_s_h512_ema.pt` | DiT<sup>DH</sup>-S with a 512-wide head, 2000 epochs (EMA), the best model (FID 7.94) | 0.2 GB |
+| `ditdh_s_ema.pt` | DiT<sup>DH</sup>-S with the official 2048-wide head, 2000 epochs (EMA; FID 13.59) | 0.8 GB |
 | `encoder_dinov2_vit_s4.pt` | DINOv2 ViT-S/4 encoder (experiment 06) | 85 MB |
 | `decoder_vitxl_gan_s4.pt` | ViT-XL decoder for the ViT-S/4 encoder, GAN fine-tuned (EMA) | 1.7 GB |
 | `disc_dino_vit_tiny4.pt` | DINO (v1) ViT-Tiny/4, frozen backbone of the GAN discriminator (only for training) | 22 MB |
@@ -76,9 +80,9 @@ scripts/eval_stage1.sh configs/stage1/pretrained/cifar_dinov2_decXL_gan_ft.yaml 
 uv run torchrun --standalone --nproc_per_node=1 src/calculate_stat.py --config configs/stage1/pretrained/cifar_dinov2_decXL_gan_ft.yaml \
   --data-path data/cifar10/train --sample-dir stats --image-size 32 --per-proc-batch-size 500 --num-workers 4 --momentum 0.02
 
-# Stage 2: DiT^DH-S (2000 epochs), then FID on 50k samples against CIFAR-10 train
-scripts/train_stage2.sh configs/stage2/training/CIFAR10/DiTDH-S_dinov2-r0_decXL-gan.yaml ditdhS_decXLgan
-scripts/eval_stage2.sh configs/stage2/sampling/CIFAR10/DiTDH-S_dinov2-r0_decXL-gan.yaml ditdhS_decXLgan_cfg1.0 1.0
+# Stage 2: DiT^DH-S with a 512-wide head (2000 epochs), then FID on 50k samples against CIFAR-10 train
+scripts/train_stage2.sh configs/stage2/training/CIFAR10/DiTDH-S-h512_dinov2-r0_decXL-gan.yaml ditdh_s_h512_decXLgan
+scripts/eval_stage2.sh configs/stage2/sampling/CIFAR10/DiTDH-S-h512_dinov2-r0_decXL-gan.yaml ditdh_s_h512_decXLgan_last_cfg1.0 1.0
 ```
 
 Configs for the other decoders (B / L, with and without GAN) are in `configs/stage1/`. The commands for each experiment
@@ -91,7 +95,7 @@ Wall-clock times on one A100-40GB (bf16 unless noted):
 | Encoder, dino-cifar DINOv2 ViT-Tiny/4 / ViT-S/4, 1000 epochs | ~16.5 h (fp32) / ~18 h (TF32) |
 | Stage 1 decoder without GAN, 400 epochs: B / L / XL | ~21 h (fp32) / ~10.5 h / ~12.5 h |
 | Stage 1 GAN fine-tuning, 100 epochs: B / L / XL | ~6 h (fp32) / ~4 h / ~5 h |
-| Stage 2 DiT<sup>DH</sup>-S, 2000 epochs (incl. 4 evaluations of 10k samples) | ~31 h |
+| Stage 2, 2000 epochs: DiT<sup>DH</sup>-S with the 2048 head / with the 512 head / DiT<sup>DH</sup>-Ti | ~31 h / ~13 h / ~9 h |
 | FID on 50k samples: without / with CFG | ~20 min / ~35 min |
 
 ## Changes from upstream
@@ -99,6 +103,7 @@ Wall-clock times on one A100-40GB (bf16 unless noted):
 - `src/stage1/encoders/cifar_dino.py`: the dino-cifar encoder (`CifarDinoViT`).
 - `src/disc/dinodisc.py`: a 32px discriminator recipe (`recipe: 'cifar'`) whose frozen backbone is a DINO ViT-Tiny/4 from dino-cifar.
 - `src/train_stage1.py`: flip-only augmentation at 32px; optional gradient checkpointing of the decoder.
+- `src/stage2/models/lightningDiT.py`: `forward_with_cfg` takes `cfg_interval=(t_min, t_max)` like DDT (CFG sampling crashed otherwise).
 - `src/train.py`, `src/sample.py`: 32px / 10-class support; resuming from `ep-last.pt` (`src/utils/resume_utils.py`).
 - `pyproject.toml` / `uv.lock`: environment managed with uv instead of conda.
 

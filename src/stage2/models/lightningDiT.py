@@ -248,39 +248,26 @@ class LightningDiT(nn.Module):
             x, _ = x.chunk(2, dim=1)
         return x
 
-    def forward_with_cfg(self, x, t, y, cfg_scale, cfg_interval=(-1e4, -1e4), interval_cfg: float = 0.0):
+    def forward_with_cfg(self, x, t, y, cfg_scale, cfg_interval=(0, 1)):
         """
         Forward pass of LightningDiT, but also batches the unconditional forward pass for classifier-free guidance.
+        cfg_interval = (t_min, t_max): guidance is applied for t in [t_min, t_max], as in DDT.DiTwDDTHead.forward_with_cfg
+        (the callers in train.py / sample*.py pass this form).
         """
-        # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
         model_out = self.forward(combined, t, y)
         if self.ssl_supervise:
-            model_out = model_out[0] # take the output only
-        # For exact reproducibility reasons, we apply classifier-free guidance on only
-        # three channels by default. The standard approach to cfg applies it to all channels.
-        # This can be done by uncommenting the following line and commenting-out the line following that.
-        # eps, rest = model_out[:, :self.in_channels], model_out[:, self.in_channels:]
+            model_out = model_out[0]  # take the output only
         eps, rest = model_out[:, :self.in_channels], model_out[:, self.in_channels:]
-        #eps, rest = model_out[:, :3], model_out[:, 3:]
         cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
-        t = t[0] # check if t < cfg_interval
-        in_interval = False
-        for i in range(len(cfg_interval)):
-            if t >= cfg_interval[i][0] and t < cfg_interval[i][1]:
-                #print(f't:{t}, cfg_interval: {cfg_interval[i]}')
-                if interval_cfg > 1.0:
-                    half_eps = uncond_eps  + interval_cfg * (cond_eps - uncond_eps)
-                else:
-                    half_eps = cond_eps # only use conditional generation
-                in_interval = True
-                break
-        if not in_interval:
-            #print(f't:{t} not in cfg_interval')
-            half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
+        guid_t_min, guid_t_max = cfg_interval
+        t = t[: len(t) // 2]  # t for the conditional half
+        half_eps = torch.where(((t >= guid_t_min) & (t <= guid_t_max)).view(-1, *[1] * (len(cond_eps.shape) - 1)),
+                               uncond_eps + cfg_scale * (cond_eps - uncond_eps), cond_eps)
         eps = torch.cat([half_eps, half_eps], dim=0)
         return torch.cat([eps, rest], dim=1)
+
     def forward_with_autoguidance(self, x, t, y, cfg_scale, additional_model_forward, cfg_interval=(-1e4, -1e4), interval_cfg: float = 0.0):
         """
         Forward pass of LightningDiT, but also contain the forward pass for the additional model

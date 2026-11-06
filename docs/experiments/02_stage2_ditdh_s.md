@@ -39,7 +39,7 @@ FID after training (final-epoch EMA, 50k samples, 5000 per class):
 
 - **FID is best at epoch 500 and gets worse afterwards**, while the training loss keeps decreasing (0.233 at the end). Possibly overfitting.
 - **CFG 3.0 makes FID worse.** We think the guidance is too strong and reduces diversity.
-- Not done: smaller CFG scales (1.25–2), and a 50k FID of the epoch-500 checkpoint.
+- A 512-wide head does much better; see [07](07_stage2_model_size.md), which also sweeps the CFG scale. The 50k FID of the epoch-500 checkpoint was not measured.
 
 ## Reproduce
 
